@@ -1,0 +1,97 @@
+[workspace]
+name      = "turtlebot_ws"
+version   = "0.1.0"
+channels  = ["conda-forge", "robostack-jazzy"]
+platforms = ["linux-64", "linux-aarch64"]
+
+# ── shared by both environments ───────────────────────────────────────────
+[dependencies]
+python                    = ">=3.10"
+ros-jazzy-turtlebot3      = "*"   # robot description, URDF, core launch files
+ros-jazzy-turtlebot3-msgs = "*"   # custom TB3 message types (SensorState etc.)
+ros-jazzy-dynamixel-sdk   = "*"   # Dynamixel servo driver — wheels + LiDAR servo on Waffle
+ros-jazzy-rmw-zenoh-cpp   = "*"   # Zenoh middleware replacing DDS for PC↔Pi communication
+ros-jazzy-foxglove-bridge = "*"   # WebSocket bridge for Foxglove Studio
+
+[activation.env]
+ROS_DOMAIN_ID      = "30"
+TURTLEBOT3_MODEL   = "waffle"
+RMW_IMPLEMENTATION = "rmw_zenoh_cpp"
+
+# ── Laptop ────────────────────────────────────────────────────────────────
+[feature.pc.dependencies]
+ros-jazzy-desktop                = "*"   # full ROS2 desktop: rviz2, rqt, all GUI tools
+ros-jazzy-navigation2            = "*"   # Nav2 stack: path planning, costmap, recovery behaviours
+ros-jazzy-nav2-bringup           = "*"   # Nav2 launch files + default nav2_params.yaml
+ros-jazzy-slam-toolbox           = "*"   # SLAM: builds live occupancy grid map from LiDAR
+ros-jazzy-turtlebot3-gazebo      = "*"   # Gazebo sim: TB3 models, world files, spawn launch
+ros-jazzy-turtlebot3-navigation2 = "*"   # TB3-tuned Nav2 param files (waffle.yaml)
+gz-harmonic                      = "*"   # Gazebo Harmonic simulator
+numpy                            = "*"   # needed by frontier_explorer.py
+scipy                            = "*"   # needed by frontier_explorer.py
+colcon-common-extensions         = "*"   # build tool: compiles explore_lite from src/
+lttng-ust                        = "*"   # required to link explore_lite
+
+[feature.pc.activation]
+scripts = ["install/setup.bash"]
+
+[feature.pc.activation.env]
+GZ_VERSION = "harmonic"
+ZENOH_ROUTER_CONFIG_URI = "config/rmw_router_pc.json5"
+
+[feature.pc.tasks]
+## middleware
+router = { cmd = "ros2 run rmw_zenoh_cpp rmw_zenohd", description = "Start Zenoh router — run this first before anything else" }
+## simulation
+sim = { cmd = "ros2 launch $PIXI_PROJECT_ROOT/launch/comp_sim.launch.py", description = "Launch TurtleBot3 Waffle in Gazebo with comp.world" }
+slam = { cmd = "ros2 launch slam_toolbox online_async_launch.py use_sim_time:=true slam_params_file:=$PIXI_PROJECT_ROOT/config/mapper_params_sim.yaml", description = "Start SLAM in simulation" }
+nav2 = { cmd = "ros2 launch nav2_bringup navigation_launch.py use_sim_time:=true params_file:=$PIXI_PROJECT_ROOT/config/nav2_params.yaml", description = "Start Nav2 in simulation (local tunable params)" }
+## real robot
+slam-real = { cmd = "ros2 launch slam_toolbox online_async_launch.py use_sim_time:=false slam_params_file:=$PIXI_PROJECT_ROOT/config/mapper_params_real.yaml", description = "Start SLAM on real robot" }
+nav2-real = { cmd = "ros2 launch nav2_bringup navigation_launch.py use_sim_time:=false params_file:=$PIXI_PROJECT_ROOT/config/nav2_params.yaml", description = "Start Nav2 on real robot (local tunable params)" }
+nav2-map = { cmd = "ros2 launch turtlebot3_navigation2 navigation2.launch.py use_sim_time:=True map:=$PIXI_PROJECT_ROOT/map/comp.yaml", description = "Start Nav2 with pre-saved comp.world map" }
+## exploration
+explore = { cmd = "python3 $PIXI_PROJECT_ROOT/scripts/explorer.py --ros-args -p use_sim_time:=true", description = "DFS-style frontier exploration — sim, continuous replan on map updates" }
+explore-real = { cmd = "python3 $PIXI_PROJECT_ROOT/scripts/dfs_explorer.py --ros-args -p use_sim_time:=false", description = "DFS-style frontier exploration — real robot" }
+## utils
+killall = { cmd = "bash $PIXI_PROJECT_ROOT/scripts/killall_ros.sh", description = "Kill all ROS2, Gazebo, Zenoh processes" }
+## tools
+rviz = { cmd = "rviz2 -d $(ros2 pkg prefix nav2_bringup)/share/nav2_bringup/rviz/nav2_default_view.rviz", description = "Open RViz2 with Nav2 default layout" }
+foxglove = { cmd = "ros2 launch foxglove_bridge foxglove_bridge_launch.xml", description = "Start Foxglove WebSocket bridge" }
+teleop = { cmd = "ros2 run turtlebot3_teleop teleop_keyboard", description = "Keyboard teleoperation" }
+save-map = { cmd = "ros2 run nav2_map_server map_saver_cli -f $PIXI_PROJECT_ROOT/map/map", description = "Save current SLAM map to map/map.pgm + map.yaml" }
+
+# ── Raspberry Pi ──────────────────────────────────────────────────────────
+[feature.sbc.dependencies]
+ros-jazzy-turtlebot3-bringup  = "*"   # launch files to start the real robot (robot.launch.py)
+ros-jazzy-turtlebot3-node     = "*"   # hardware interface: reads sensors, drives motors
+ros-jazzy-hls-lfcd-lds-driver = "*"   # LiDAR driver for LDS-02 sensor on TurtleBot3 Waffle
+ros-jazzy-xacro               = "*"   # XML macro processor for robot URDF
+colcon-common-extensions      = "*"   # build tool: compiles LiDAR driver packages in src/
+
+[feature.sbc.activation]
+scripts = ["install/setup.bash"]
+
+[feature.sbc.activation.env]
+LDS_MODEL    = "LDS-02"
+OPENCR_PORT  = "/dev/ttyACM0"
+OPENCR_MODEL = "waffle"
+
+[feature.sbc.tasks]
+## setup
+pixi-install = { cmd = "pixi install", description = "Install pixi environment" }
+_clone-ld08 = { cmd = "test -d src/ld08_driver || git clone -b jazzy https://github.com/ROBOTIS-GIT/ld08_driver.git src/ld08_driver", description = "Clone LD08 LiDAR driver into src/" }
+_clone-coin = { cmd = "test -d src/coin_d4_driver || git clone -b jazzy https://github.com/ROBOTIS-GIT/coin_d4_driver.git src/coin_d4_driver", description = "Clone CoinD4 LiDAR driver into src/" }
+build = { cmd = "colcon build --symlink-install --parallel-workers 1", depends-on = ["_clone-ld08", "_clone-coin"], description = "Build LiDAR drivers on Pi (1 worker — slow CPU)" }
+setup = { depends-on = ["pixi-install", "_clone-ld08", "_clone-coin", "build"], description = "Install env, clone LiDAR drivers, and build" }
+## system setup (run once, requires sudo)
+system-setup = { cmd = "bash scripts/pi_system_setup.sh", description = "One-time Pi system setup: disable auto-updates, mask services, udev rules, OpenCR prereqs" }
+opencr-download = { cmd = "bash scripts/opencr_download.sh", description = "Download and extract OpenCR firmware" }
+flash-opencr = { cmd = "cd opencr_update && ./update.sh $OPENCR_PORT $OPENCR_MODEL.opencr", description = "Flash OpenCR firmware (run opencr-download first)" }
+## robot
+bringup = { cmd = "ros2 launch turtlebot3_bringup robot.launch.py", description = "Start real robot: LiDAR + motors + odometry (starts router first)" }
+
+# ── environments ──────────────────────────────────────────────────────────
+[environments]
+default = ["pc"]
+pi      = ["sbc"]

@@ -1,0 +1,8 @@
+[submodule "src/ld08_driver"]
+	path = src/ld08_driver
+	url = https://github.com/ROBOTIS-GIT/ld08_driver.git
+	branch = jazzy
+[submodule "src/coin_d4_driver"]
+	path = src/coin_d4_driver
+	url = https://github.com/ROBOTIS-GIT/coin_d4_driver.git
+	branch = jazzy
