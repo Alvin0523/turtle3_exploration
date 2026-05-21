@@ -244,56 +244,36 @@ Changes from original waffle.yaml — recorded here so we know what was changed,
 
 ---
 
-## Known Issues & Fixes Applied
-
-| Issue | Root Cause | Fix Applied |
-|-------|-----------|-------------|
-| Robot not moving with Nav2 | Nav2 publishing `Twist`, robot expecting `TwistStamped` | Added `enable_stamped_cmd_vel: true` throughout nav2_params.yaml |
-| SLAM stuck at "Activating" | `comp.world` missing Gazebo Harmonic system plugins | Added `gz-sim-physics-system`, `gz-sim-sensors-system`, etc. to comp.world |
-| Arena spawning at wrong position/rotation | Gazebo Classic `<state>` block overriding model pose in Harmonic | Removed `<state>` block, set model pose to `0 0 0` |
-| explore_lite stops early | Nav2 "Failed to make progress" blacklists reachable frontiers | Increase `movement_time_allowance` + reduce `inflation_radius` |
 
 ---
 
-## File Structure
+## Autonomous Exploration Logic (explorer.py)
 
-```
-turtlebot_ws/
-├── pixi.toml                  # environment + all task definitions
-├── pixi.lock                  # locked dependency versions
-├── comp.world                 # competition Gazebo world (SDF)
-├── comp_sim.launch.py         # launches Gazebo with comp.world + TB3 robot
-├── config/
-│   └── nav2_params.yaml       # editable Nav2 params (edit this to tune)
-├── src/
-│   └── m-explore-ros2/        # frontier exploration package (built locally)
-│       └── explore/config/
-│           └── params.yaml    # explore_lite frontier params (edit this to tune)
-└── install/                   # colcon build output (explore_lite)
-```
+The `scripts/explorer.py` node implements autonomous frontier-based exploration for TurtleBot3 using ROS 2. Key logic:
 
----
+- **Frontier Detection:**
+  - Identifies free map cells adjacent to unknown space as frontiers.
+  - Only considers frontiers wide enough for the robot and with a safe, non-inflated costmap value at the centroid.
 
-## Debugging Checklist
+- **Navigation Strategy:**
+  - Selects the nearest valid frontier by path distance (using the costmap for reachability).
+  - While navigating, commits to the current frontier unless it disappears or is no longer ahead.
+  - If the current frontier clears, prefers a new frontier within ±45° of the robot's heading; otherwise, picks the global nearest.
+  - Navigation goals are set to the nearest costmap-free cell near the frontier centroid.
 
-```
-Robot not moving at all?
-  □ ros2 topic hz /scan        — should be ~8 Hz
-  □ ros2 topic hz /odom        — should be ~44 Hz
-  □ ros2 run tf2_tools view_frames — map→odom→base_link chain must exist
-  □ check /global_costmap/costmap in RViz — all blue = inflation too large
+- **Visualization:**
+  - Publishes frontiers as markers in RViz on `/explore/frontiers`.
+    - Green: Valid frontier waypoints
+    - Yellow: Currently navigating target
 
-Robot moves then gets stuck repeatedly?
-  □ look at local_costmap in RViz — is the corridor entirely blue?
-  □ reduce inflation_radius in config/nav2_params.yaml
-  □ increase movement_time_allowance
+- **ROS 2 Integration:**
+  - Subscribes to map, map updates, and costmap topics.
+  - Uses Nav2's `NavigateToPose` action for movement.
+  - Uses TF2 to get the robot's current pose.
 
-Planner says "no path found"?
-  □ check allow_unknown: true in planner_server
-  □ check inflation_radius — may be blocking the only path
+- **Parameters:**
+  - `min_frontier_cells`: Minimum number of cells for a valid frontier.
+  - `planner_frequency`: How often to replan (Hz).
+  - `heading_cone_deg`: Angle for heading commitment (default 45°).
 
-explore_lite stops before map is complete?
-  □ increase progress_timeout in explore/config/params.yaml
-  □ reduce min_frontier_size
-  □ check if robot can physically reach the remaining frontier area
-```
+See `scripts/explorer.py` for implementation details.
