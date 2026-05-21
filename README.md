@@ -8,7 +8,7 @@ using TurtleBot3 Waffle + LiDAR + SLAM + Nav2 + custom explore. Shortest time wi
 ## Setup
 
 ```bash
-# Clone with all submodules (ld08_driver, coin_d4_driver, m-explore-ros2)
+# Clone with all submodules (ld08_driver, coin_d4_driver)
 git clone --recursive <repo-url> turtlebot_ws
 cd turtlebot_ws
 
@@ -26,7 +26,6 @@ pixi run build
 Submodules:
 - `src/ld08_driver` — branch `jazzy` (Pi LiDAR driver)
 - `src/coin_d4_driver` — branch `jazzy` (Pi LiDAR driver)
-- `src/m-explore-ros2` — branch `feature/slam_toolbox_compat` (frontier exploration)
 
 ---
 
